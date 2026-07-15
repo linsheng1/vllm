@@ -1235,6 +1235,8 @@ class DeepseekV4DecoderLayer(nn.Module):
 
 @support_torch_compile
 class DeepseekV4Model(nn.Module):
+    layer_cls = DeepseekV4DecoderLayer
+
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
         super().__init__()
 
@@ -1288,7 +1290,7 @@ class DeepseekV4Model(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: DeepseekV4DecoderLayer(
+            lambda prefix: self.layer_cls(
                 vllm_config,
                 prefix=prefix,
                 topk_indices_buffer=self.topk_indices_buffer,

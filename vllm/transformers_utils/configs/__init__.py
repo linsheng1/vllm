@@ -27,6 +27,9 @@ _CLASS_TO_MODULE: dict[str, str] = {
     "Qwen3VLNemotronEmbedConfig": "vllm.transformers_utils.configs.colqwen3",
     "DeepseekVLV2Config": "vllm.transformers_utils.configs.deepseek_vl2",
     "DeepseekV4Config": "vllm.transformers_utils.configs.deepseek_v4",
+    "DKDeepseekV4KDAConfig": (
+        "vllm.transformers_utils.configs.dk_deepseek_v4_kda"
+    ),
     "DotsOCRConfig": "vllm.transformers_utils.configs.dotsocr",
     "EAGLEConfig": "vllm.transformers_utils.configs.eagle",
     "FireRedLIDConfig": "vllm.transformers_utils.configs.fireredlid",
@@ -98,6 +101,7 @@ __all__ = [
     "DeepseekVLV2Config",
     "DeepseekV3Config",
     "DeepseekV4Config",
+    "DKDeepseekV4KDAConfig",
     "DotsOCRConfig",
     "EAGLEConfig",
     "FlexOlmoConfig",

@@ -628,7 +628,7 @@ class ModelConfig:
                 self.tokenizer_mode = "qwen_vl"
             elif arch == "DeepseekV32ForCausalLM":
                 self.tokenizer_mode = "deepseek_v32"
-            elif arch == "DeepseekV4ForCausalLM":
+            elif arch in ("DeepseekV4ForCausalLM", "DKDeepseekV4KDAForCausalLM"):
                 self.tokenizer_mode = "deepseek_v4"
 
             if self.tokenizer_mode != "auto":
