@@ -324,10 +324,13 @@ class DeepseekV4MultiHeadLatentAttentionWrapper(PluggableLayer):
             return self.wo_b(z.flatten(1))
 
         # O projection: inverse RoPE + FP8 quant + einsum + wo_b
+        cos_sin_cache = self.rotary_emb.cos_sin_cache
+        if cos_sin_cache.dtype != torch.float32:
+            cos_sin_cache = cos_sin_cache.float()
         o_fp8, o_scale = fused_inv_rope_fp8_quant(
             o,
             positions,
-            self.rotary_emb.cos_sin_cache,
+            cos_sin_cache,
             n_groups=self.n_local_groups,
             heads_per_group=self.n_local_heads // self.n_local_groups,
             nope_dim=self.nope_head_dim,

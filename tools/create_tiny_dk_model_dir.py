@@ -253,7 +253,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--intermediate-size", type=int, default=512)
     parser.add_argument("--moe-intermediate-size", type=int, default=128)
     parser.add_argument("--num-attention-heads", type=int, default=4)
-    parser.add_argument("--head-dim", type=int, default=64)
+    parser.add_argument("--head-dim", type=int, default=128)
     parser.add_argument("--q-lora-rank", type=int, default=64)
     parser.add_argument("--o-lora-rank", type=int, default=64)
     parser.add_argument("--qk-rope-head-dim", type=int, default=32)
