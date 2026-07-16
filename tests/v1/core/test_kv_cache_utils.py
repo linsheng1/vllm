@@ -1892,14 +1892,16 @@ def test_group_and_unify_kv_cache_specs_requires_full_mla_group():
 
 
 def test_unify_kv_cache_spec_page_size_pads_non_divisible_specs():
-    small_spec = new_sliding_window_spec(
-        block_size=16,
+    small_spec = SlidingWindowMLASpec(
+        block_size=1,
         num_kv_heads=1,
-        head_size=3,
+        head_size=1,
+        dtype=torch.float32,
         sliding_window=128,
+        alignment=8,
     )
     large_spec = new_sliding_window_spec(
-        block_size=16,
+        block_size=1,
         num_kv_heads=1,
         head_size=5,
         sliding_window=128,
