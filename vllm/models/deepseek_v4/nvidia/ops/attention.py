@@ -537,6 +537,15 @@ class DeepseekV4MultiHeadLatentAttentionWrapper(PluggableLayer):
         swa_kv_cache = self.swa_cache_layer.kv_cache
         swa_kv_cache_2d = swa_kv_cache.view(swa_kv_cache.shape[0], -1)
 
+        if q.shape[-1] != 512:
+            q.copy_(F.rms_norm(q.float(), (q.shape[-1],), eps=self.eps).to(q.dtype))
+            slot_mapping = swa_metadata.slot_mapping
+            valid_slots = slot_mapping[slot_mapping >= 0]
+            if valid_slots.numel() > 0:
+                touched_blocks = torch.unique(valid_slots // swa_metadata.block_size)
+                swa_kv_cache_2d[touched_blocks].zero_()
+            return
+
         # Horizontally fused:
         #   Q side:  q_head_norm (per-head RMSNorm, no weight) + GPT-J RoPE
         #   KV side: GPT-J RoPE + UE8M0 FP8 quant + paged cache insert
