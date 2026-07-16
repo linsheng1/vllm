@@ -134,7 +134,7 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
         "kv_lora_rank": args.head_dim,
         "v_head_dim": args.head_dim,
         "o_groups": args.o_groups,
-        "sliding_window": None,
+        "sliding_window": args.sliding_window,
         "compress_ratios": [1] * args.num_hidden_layers,
         "index_head_dim": args.index_head_dim,
         "index_n_heads": args.index_n_heads,
@@ -264,6 +264,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-routed-experts", type=int, default=2)
     parser.add_argument("--num-experts-per-tok", type=int, default=1)
     parser.add_argument("--hc-mult", type=int, default=1)
+    parser.add_argument("--sliding-window", type=int, default=512)
     parser.add_argument("--max-position-embeddings", type=int, default=2048)
     parser.add_argument("--kimi-hidden-size", type=int, default=256)
     parser.add_argument("--kimi-intermediate-size", type=int, default=512)
