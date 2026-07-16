@@ -2241,6 +2241,11 @@ def wvSplitKQ(
 
 # moe
 def moe_sum(input: torch.Tensor, output: torch.Tensor):
+    if not (
+        hasattr(torch.ops, "_moe_C") and hasattr(torch.ops._moe_C, "moe_sum")
+    ):
+        torch.sum(input, dim=1, out=output)
+        return
     torch.ops._moe_C.moe_sum(input, output)
 
 
