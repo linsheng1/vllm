@@ -14,6 +14,22 @@ from vllm.model_executor.layers.fused_moe.config import (
 from vllm.model_executor.layers.fused_moe.router.base_router import BaseRouter
 
 
+def _torch_topk(
+    topk_weights: torch.Tensor,
+    topk_indices: torch.Tensor,
+    token_expert_indices: torch.Tensor,
+    scores: torch.Tensor,
+    renormalize: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    values, indices = torch.topk(scores, topk_weights.shape[1], dim=-1)
+    if renormalize:
+        values = values / values.sum(dim=-1, keepdim=True).clamp_min(1e-20)
+    topk_weights.copy_(values)
+    topk_indices.copy_(indices)
+    token_expert_indices.copy_(indices)
+    return topk_weights, topk_indices
+
+
 def vllm_topk_softmax(
     topk_weights: torch.Tensor,
     topk_indices: torch.Tensor,
@@ -21,13 +37,22 @@ def vllm_topk_softmax(
     gating_output: torch.Tensor,
     renormalize: bool = False,
 ) -> tuple[torch.Tensor, ...]:
-    ops.topk_softmax(
-        topk_weights,
-        topk_indices,
-        token_expert_indices,
-        gating_output,
-        renormalize,
-    )
+    try:
+        ops.topk_softmax(
+            topk_weights,
+            topk_indices,
+            token_expert_indices,
+            gating_output,
+            renormalize,
+        )
+    except AttributeError:
+        return _torch_topk(
+            topk_weights,
+            topk_indices,
+            token_expert_indices,
+            gating_output.softmax(dim=-1),
+            renormalize,
+        )
 
     return topk_weights, topk_indices
 
@@ -39,13 +64,22 @@ def vllm_topk_sigmoid(
     gating_output: torch.Tensor,
     renormalize: bool = False,
 ) -> tuple[torch.Tensor, ...]:
-    ops.topk_sigmoid(
-        topk_weights,
-        topk_indices,
-        token_expert_indices,
-        gating_output,
-        renormalize,
-    )
+    try:
+        ops.topk_sigmoid(
+            topk_weights,
+            topk_indices,
+            token_expert_indices,
+            gating_output,
+            renormalize,
+        )
+    except AttributeError:
+        return _torch_topk(
+            topk_weights,
+            topk_indices,
+            token_expert_indices,
+            gating_output.sigmoid(),
+            renormalize,
+        )
 
     return topk_weights, topk_indices
 
