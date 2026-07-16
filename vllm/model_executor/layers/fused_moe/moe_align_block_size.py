@@ -8,6 +8,68 @@ from vllm.triton_utils import triton
 from vllm.utils.math_utils import round_up
 
 
+def _has_moe_align_block_size_op() -> bool:
+    return hasattr(torch.ops, "_moe_C") and hasattr(
+        torch.ops._moe_C, "moe_align_block_size"
+    )
+
+
+def _torch_moe_align_block_size(
+    topk_ids: torch.Tensor,
+    block_size: int,
+    num_experts: int,
+    expert_map: torch.Tensor | None,
+    max_num_tokens_padded: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    flattened_token_indices = torch.arange(
+        topk_ids.numel(), dtype=torch.int32, device=topk_ids.device
+    )
+    flattened_expert_ids = topk_ids.flatten()
+    sorted_expert_ids, sort_indices = torch.sort(flattened_expert_ids, stable=True)
+    sorted_token_indices = flattened_token_indices[sort_indices]
+
+    sorted_ids = torch.full(
+        (max_num_tokens_padded,),
+        topk_ids.numel(),
+        dtype=torch.int32,
+        device=topk_ids.device,
+    )
+    max_num_m_blocks = triton.cdiv(max_num_tokens_padded, block_size)
+    expert_ids = torch.full(
+        (max_num_m_blocks,), -1, dtype=torch.int32, device=topk_ids.device
+    )
+
+    current_pos = 0
+    current_block = 0
+    total_padded_tokens = 0
+    for expert_id in range(num_experts):
+        if expert_map is not None and expert_map[expert_id] == -1:
+            continue
+
+        expert_tokens = sorted_token_indices[sorted_expert_ids == expert_id]
+        num_expert_tokens = expert_tokens.numel()
+        if num_expert_tokens == 0:
+            continue
+
+        padded_count = round_up(num_expert_tokens, block_size)
+        sorted_ids[current_pos : current_pos + num_expert_tokens] = expert_tokens
+
+        num_blocks = padded_count // block_size
+        mapped_expert_id = expert_id
+        if expert_map is not None:
+            mapped_expert_id = int(expert_map[expert_id].item())
+        expert_ids[current_block : current_block + num_blocks] = mapped_expert_id
+
+        current_pos += padded_count
+        current_block += num_blocks
+        total_padded_tokens += padded_count
+
+    num_tokens_post_pad = torch.tensor(
+        [total_padded_tokens], dtype=torch.int32, device=topk_ids.device
+    )
+    return sorted_ids, expert_ids, num_tokens_post_pad
+
+
 def moe_align_block_size(
     topk_ids: torch.Tensor,
     block_size: int,
@@ -78,6 +140,18 @@ def moe_align_block_size(
         max_num_tokens_padded = min(
             topk_ids.numel() * block_size, max_num_tokens_padded
         )
+    if not _has_moe_align_block_size_op():
+        sorted_ids, expert_ids, num_tokens_post_pad = _torch_moe_align_block_size(
+            topk_ids,
+            block_size,
+            num_experts,
+            expert_map if ignore_invalid_experts else None,
+            max_num_tokens_padded,
+        )
+        if expert_map is not None and not ignore_invalid_experts:
+            expert_ids = expert_map[expert_ids]
+        return sorted_ids, expert_ids, num_tokens_post_pad
+
     sorted_ids = torch.empty(
         (max_num_tokens_padded,), dtype=torch.int32, device=topk_ids.device
     )
