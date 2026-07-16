@@ -1442,7 +1442,9 @@ def group_and_unify_kv_cache_specs(
         elif isinstance(spec, MLAAttentionSpec):
             mla_specs[name] = spec
 
-    assert len(mla_specs) > 0
+    if len(mla_specs) == 0:
+        return None
+
     mla_uniform_spec = UniformTypeKVCacheSpecs.from_specs(mla_specs)
     assert mla_uniform_spec is not None
 

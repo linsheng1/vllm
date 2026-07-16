@@ -1870,6 +1870,27 @@ def new_mla_spec(cache_dtype_str=None):
     )
 
 
+def test_group_and_unify_kv_cache_specs_requires_full_mla_group():
+    kv_cache_spec = {
+        "layer_1": SlidingWindowMLASpec(
+            block_size=16,
+            num_kv_heads=1,
+            head_size=576,
+            dtype=torch.float32,
+            sliding_window=128,
+        ),
+        "layer_2": SlidingWindowMLASpec(
+            block_size=32,
+            num_kv_heads=1,
+            head_size=576,
+            dtype=torch.float32,
+            sliding_window=256,
+        ),
+    }
+
+    assert kv_cache_utils.group_and_unify_kv_cache_specs(kv_cache_spec) is None
+
+
 def test_get_kv_cache_spec_kind_prefers_specific_attention_subclasses():
     assert get_kv_cache_spec_kind(new_mla_spec()) == KVCacheSpecKind.MLA_ATTENTION
 
