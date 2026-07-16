@@ -1891,6 +1891,30 @@ def test_group_and_unify_kv_cache_specs_requires_full_mla_group():
     assert kv_cache_utils.group_and_unify_kv_cache_specs(kv_cache_spec) is None
 
 
+def test_unify_kv_cache_spec_page_size_pads_non_divisible_specs():
+    small_spec = new_sliding_window_spec(
+        block_size=16,
+        num_kv_heads=1,
+        head_size=3,
+        sliding_window=128,
+    )
+    large_spec = new_sliding_window_spec(
+        block_size=16,
+        num_kv_heads=1,
+        head_size=5,
+        sliding_window=128,
+    )
+    assert large_spec.page_size_bytes % small_spec.page_size_bytes != 0
+
+    unified = kv_cache_utils.unify_kv_cache_spec_page_size(
+        {"small": small_spec, "large": large_spec}
+    )
+
+    assert unified["small"].page_size_padded == large_spec.page_size_bytes
+    assert unified["small"].page_size_bytes == large_spec.page_size_bytes
+    assert unified["large"] == large_spec
+
+
 def test_get_kv_cache_spec_kind_prefers_specific_attention_subclasses():
     assert get_kv_cache_spec_kind(new_mla_spec()) == KVCacheSpecKind.MLA_ATTENTION
 

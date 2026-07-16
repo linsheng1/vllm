@@ -1037,6 +1037,11 @@ def unify_kv_cache_spec_page_size(
         else:
             layer_page_size = layer_spec.page_size_bytes
             if max_page_size % layer_page_size != 0:
+                if hasattr(layer_spec, "page_size_padded"):
+                    new_spec = replace(layer_spec, page_size_padded=max_page_size)
+                    assert new_spec.page_size_bytes == max_page_size
+                    new_kv_cache_spec[layer_name] = new_spec
+                    continue
                 raise NotImplementedError(
                     "The page size of the layer is not divisible by the "
                     "maximum page size. Cannot unify by adjusting block_size."
