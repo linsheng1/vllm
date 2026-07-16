@@ -310,8 +310,13 @@ class DeepseekV4MultiHeadLatentAttentionWrapper(PluggableLayer):
         )
         o = o_padded[:, : self.n_local_heads, :]
 
-        # Keep ROCm on the BF16 reference wo_a path util kernel ready.
-        if current_platform.is_rocm():
+        # Keep ROCm and pre-Hopper CUDA on the BF16 reference WO_A path. The
+        # fast path below relies on e4m3 fp8 kernels, which are unavailable on
+        # Ampere-class CUDA devices such as A10.
+        if current_platform.is_rocm() or (
+            current_platform.is_cuda()
+            and not current_platform.has_device_capability(90)
+        ):
             z = rocm_inv_rope_einsum(
                 self.rotary_emb,
                 o,
