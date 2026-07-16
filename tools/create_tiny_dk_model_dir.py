@@ -145,7 +145,7 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
         "n_shared_experts": None,
         "norm_topk_prob": True,
         "routed_scaling_factor": 1.0,
-        "scoring_func": "sqrtsoftplus",
+        "scoring_func": "sigmoid",
         "swiglu_limit": None,
         "topk_method": "greedy",
         "hidden_act": "silu",
