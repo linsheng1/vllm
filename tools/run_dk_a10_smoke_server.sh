@@ -24,5 +24,4 @@ VLLM_USE_V1="${VLLM_USE_V1:-1}" uv run --no-project vllm serve "${MODEL_DIR}" \
   --dtype "${DTYPE}" \
   --max-model-len "${MAX_MODEL_LEN}" \
   --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}" \
-  --enforce-eager \
-  --disable-log-requests
+  --enforce-eager

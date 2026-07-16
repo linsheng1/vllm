@@ -199,7 +199,7 @@ def build_tokenizer_json(vocab_size: int) -> dict[str, Any]:
         "normalizer": None,
         "pre_tokenizer": {"type": "Whitespace"},
         "post_processor": None,
-        "decoder": {"type": "WordPiece", "prefix": ""},
+        "decoder": None,
         "model": {
             "type": "WordLevel",
             "vocab": vocab,
