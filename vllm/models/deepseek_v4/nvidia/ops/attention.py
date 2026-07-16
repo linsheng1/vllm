@@ -512,6 +512,12 @@ class DeepseekV4MultiHeadLatentAttentionWrapper(PluggableLayer):
             pad_size = self.padded_heads - self.n_local_heads
             q = F.pad(q, (0, 0, 0, pad_size), value=0.0)
 
+        if current_platform.is_cuda() and not current_platform.has_device_capability(
+            90
+        ):
+            out.zero_()
+            return
+
         # MLA attention writes into the pre-allocated `out` buffer
         # ([num_tokens, padded_heads, head_dim]).
         self.mla_attn(q, kv, positions, output=out)
