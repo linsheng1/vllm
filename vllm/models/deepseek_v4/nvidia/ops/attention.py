@@ -541,16 +541,26 @@ class DeepseekV4MultiHeadLatentAttentionWrapper(PluggableLayer):
         #   Q side:  q_head_norm (per-head RMSNorm, no weight) + GPT-J RoPE
         #   KV side: GPT-J RoPE + UE8M0 FP8 quant + paged cache insert
         # kv is unchanged; mla_attn reads kv solely via swa_kv_cache.
-        torch.ops._C.fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert(
+        fused_op = torch.ops._C.fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert
+        fused_args = (
             q,
             kv,
             swa_kv_cache_2d,
             swa_metadata.slot_mapping,
             positions.to(torch.int64),
             self.rotary_emb.cos_sin_cache,
-            self.eps,
-            swa_metadata.block_size,
         )
+        try:
+            fused_op(*fused_args, self.eps, swa_metadata.block_size)
+        except RuntimeError as e:
+            if "q_head_padded" not in str(e):
+                raise
+            fused_op(
+                *fused_args,
+                self.padded_heads,
+                self.eps,
+                swa_metadata.block_size,
+            )
 
 
 @eager_break_during_capture
