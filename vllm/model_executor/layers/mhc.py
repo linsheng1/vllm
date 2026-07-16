@@ -1,10 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
+import torch.nn.functional as F
 
 # this import will also register the custom ops
 import vllm.model_executor.kernels.mhc as mhc_kernels
 from vllm.model_executor.custom_op import CustomOp
+from vllm.platforms import current_platform
+
+
+def _use_torch_mhc_cuda_fallback() -> bool:
+    return (
+        current_platform.is_cuda()
+        and not current_platform.has_device_capability(90)
+    )
+
+
+def _maybe_rms_norm(
+    x: torch.Tensor,
+    norm_weight: torch.Tensor | None,
+    norm_eps: float,
+) -> torch.Tensor:
+    if norm_weight is None:
+        return x
+    return F.rms_norm(x, (x.shape[-1],), norm_weight, norm_eps)
+
+
+def _hc_head_torch(
+    hidden_states: torch.Tensor,
+    hc_fn: torch.Tensor,
+    hc_scale: torch.Tensor,
+    hc_base: torch.Tensor,
+    rms_norm_eps: float,
+    hc_eps: float,
+) -> torch.Tensor:
+    hc_mult, hidden_size = hidden_states.shape[-2:]
+    hs_flat = hidden_states.view(-1, hc_mult, hidden_size)
+    x_flat = hs_flat.flatten(-2).to(torch.float32)
+    x_normed = x_flat * torch.rsqrt(
+        x_flat.square().mean(dim=-1, keepdim=True) + rms_norm_eps)
+    mix = F.linear(x_normed, hc_fn)
+    gates = torch.sigmoid(mix * hc_scale + hc_base) + hc_eps
+    out = torch.sum(gates.unsqueeze(-1) * hs_flat.to(torch.float32), dim=1)
+    return out.to(torch.bfloat16).view(*hidden_states.shape[:-2], hidden_size)
 
 
 # --8<-- [start:mhc_pre]
@@ -37,6 +75,25 @@ class MHCPreOp(CustomOp):
         norm_weight: torch.Tensor | None = None,
         norm_eps: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if _use_torch_mhc_cuda_fallback():
+            post_mix, comb_mix, layer_input = mhc_kernels.mhc_pre_torch(
+                residual,
+                fn,
+                hc_scale,
+                hc_base,
+                rms_eps,
+                hc_pre_eps,
+                hc_sinkhorn_eps,
+                hc_post_mult_value,
+                sinkhorn_repeat,
+                n_splits,
+            )
+            return (
+                post_mix,
+                comb_mix,
+                _maybe_rms_norm(layer_input, norm_weight, norm_eps),
+            )
+
         return torch.ops.vllm.mhc_pre_tilelang(
             residual,
             fn,
@@ -123,6 +180,14 @@ class MHCPostOp(CustomOp):
         post_layer_mix: torch.Tensor,
         comb_res_mix: torch.Tensor,
     ) -> torch.Tensor:
+        if _use_torch_mhc_cuda_fallback():
+            return mhc_kernels.mhc_post_torch(
+                x,
+                residual,
+                post_layer_mix,
+                comb_res_mix,
+            )
+
         return torch.ops.vllm.mhc_post_tilelang(
             x, residual, post_layer_mix, comb_res_mix
         )
@@ -182,6 +247,16 @@ class HCHeadOp(CustomOp):
         rms_norm_eps: float,
         hc_eps: float,
     ) -> torch.Tensor:
+        if _use_torch_mhc_cuda_fallback():
+            return _hc_head_torch(
+                hidden_states,
+                hc_fn,
+                hc_scale,
+                hc_base,
+                rms_norm_eps,
+                hc_eps,
+            )
+
         hc_mult, hidden_size = hidden_states.shape[-2:]
         outer_shape = hidden_states.shape[:-2]
         hs_flat = hidden_states.view(-1, hc_mult, hidden_size)
@@ -271,6 +346,30 @@ class MHCFusedPostPreOp(CustomOp):
         norm_weight: torch.Tensor | None = None,
         norm_eps: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if _use_torch_mhc_cuda_fallback():
+            residual_cur = mhc_kernels.mhc_post_torch(
+                x,
+                residual,
+                post_layer_mix,
+                comb_res_mix,
+            )
+            post_mix_cur, comb_mix_cur, layer_input_cur = (
+                mhc_kernels.mhc_pre_torch(
+                    residual_cur,
+                    fn,
+                    hc_scale,
+                    hc_base,
+                    rms_eps,
+                    hc_pre_eps,
+                    hc_sinkhorn_eps,
+                    hc_post_mult_value,
+                    sinkhorn_repeat,
+                    n_splits,
+                ))
+            layer_input_cur = _maybe_rms_norm(layer_input_cur, norm_weight,
+                                              norm_eps)
+            return residual_cur, post_mix_cur, comb_mix_cur, layer_input_cur
+
         return torch.ops.vllm.mhc_fused_post_pre_tilelang(
             x,
             residual,
